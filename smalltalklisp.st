@@ -92,6 +92,102 @@ Subr subclass: SubrCons [
   ]
 ]
 
+Subr subclass: SubrEq [
+  call: args [
+    | x y |
+    x := Util safeCar: args.
+    y := Util safeCar: (Util safeCdr: args).
+    ((x class) = Num & (y class) = Num) ifTrue: [
+      (x data) = (y data) ifTrue: [
+        ^Util getT
+      ] ifFalse: [
+        ^Util getNil
+      ]
+    ] ifFalse: [
+      x == y ifTrue: [
+        ^Util getT
+      ] ifFalse: [
+        ^Util getNil
+      ]
+    ]
+  ]
+]
+
+Subr subclass: SubrAtom [
+  call: args [
+    (Util safeCar: args) class = Cons ifTrue: [
+      ^Util getNil
+    ] ifFalse: [
+      ^Util getT
+    ]
+  ]
+]
+
+Subr subclass: SubrNumberp [
+  call: args [
+    (Util safeCar: args) class = Num ifTrue: [
+      ^Util getT
+    ] ifFalse: [
+      ^Util getNil
+    ]
+  ]
+]
+
+Subr subclass: SubrSymbolp [
+  call: args [
+    (Util safeCar: args) class = Sym ifTrue: [
+      ^Util getT
+    ] ifFalse: [
+      ^Util getNil
+    ]
+  ]
+]
+
+Subr subclass: SubrAddOrMul [
+  | initVal |
+  SubrAddOrMul class >> new: v [^super new set: v; yourself]
+  set: v [
+    initVal := v.
+  ]
+  call: args [
+    | ret a add |
+    ret := initVal.
+    ret = 0 ifTrue: [
+      add := true
+    ] ifFalse: [
+      add := false
+    ].
+    a := args.
+    [(a class) = Cons] whileTrue: [
+      ((a car) class) ~= Num ifTrue: [^Error new: 'wrong type'].
+      add ifTrue: [
+        ret := ret + ((a car) data)
+      ] ifFalse: [
+        ret := ret * ((a car) data)
+      ].
+      a := a cdr
+    ].
+    ^Num new: ret
+  ]
+]
+
+Subr subclass: SubrSubOrDivOrMod [
+  | type |
+  SubrSubOrDivOrMod class >> new: t [^super new set: t; yourself]
+  set: t [
+    type := t.
+  ]
+  call: args [
+    | x y |
+    x := Util safeCar: args.
+    y := Util safeCar: (Util safeCdr: args).
+    ((x class) ~= Num) | ((y class) ~= Num) ifTrue: [^Error new: 'wrong type'].
+    type = #sub ifTrue: [^Num new: ((x data) - (y data))].
+    type = #div ifTrue: [^Num new: ((x data) // (y data))].
+    type = #mod ifTrue: [^Num new: ((x data) \\ (y data))]
+  ]
+]
+
 LObj subclass: Expr [
   | args body env |
   Expr class >> new: a env: e [^super new setData: a env: e; yourself]
@@ -141,9 +237,22 @@ Object subclass: Util [
     self addToEnv: (self makeSym: 'car') val: (SubrCar new) to: gEnv.
     self addToEnv: (self makeSym: 'cdr') val: (SubrCdr new) to: gEnv.
     self addToEnv: (self makeSym: 'cons') val: (SubrCons new) to: gEnv.
+    self addToEnv: (self makeSym: 'eq') val: (SubrEq new) to: gEnv.
+    self addToEnv: (self makeSym: 'atom') val: (SubrAtom new) to: gEnv.
+    self addToEnv: (self makeSym: 'numberp') val: (SubrNumberp new) to: gEnv.
+    self addToEnv: (self makeSym: 'symbolp') val: (SubrSymbolp new) to: gEnv.
+    self addToEnv: (self makeSym: '+') val: (SubrAddOrMul new: 0) to: gEnv.
+    self addToEnv: (self makeSym: '*') val: (SubrAddOrMul new: 1) to: gEnv.
+    self addToEnv: (self makeSym: '-')
+        val: (SubrSubOrDivOrMod new: #sub) to: gEnv.
+    self addToEnv: (self makeSym: '/')
+        val: (SubrSubOrDivOrMod new: #div) to: gEnv.
+    self addToEnv: (self makeSym: 'mod')
+        val: (SubrSubOrDivOrMod new: #mod) to: gEnv.
   ]
 
   Util class >> getNil [^kNil]
+  Util class >> getT [^symT]
 
   symTable := Dictionary new.
   Util class >> makeSym: s [
