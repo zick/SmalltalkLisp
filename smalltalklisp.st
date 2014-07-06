@@ -5,6 +5,7 @@ Object subclass: LObj [
 LObj subclass: Nil [
   Nil class >> new [^super new]
   print [^'nil']
+  eval: env [^self]
 ]
 
 LObj subclass: Num [
@@ -13,6 +14,7 @@ LObj subclass: Num [
   setData: n [num := n]
   data [^num]
   print [^num printString]
+  eval: env [^self]
 ]
 
 LObj subclass: Sym [
@@ -21,6 +23,15 @@ LObj subclass: Sym [
   setData: s [name := s]
   data [^name]
   print [^name]
+  eval: env [
+    | bind |
+    bind := Util findVar: self from: env.
+    (bind class) = Nil ifTrue: [
+      ^Error new: name, ' has no value'
+    ] ifFalse: [
+      ^bind cdr
+    ]
+  ]
 ]
 
 LObj subclass: Error [
@@ -29,6 +40,7 @@ LObj subclass: Error [
   setData: s [msg := s]
   data [^msg]
   print [^'<error: ', msg, '>']
+  eval: env [^self]
 ]
 
 LObj subclass: Cons [
@@ -67,10 +79,15 @@ Object subclass: Util [
   kQuote :=  $'.
 
   kNil := Nil new.
+  symT := nil.
   symQuote := nil.
+  gEnv := nil.
 
   Util class >> init [
+    symT := self makeSym: 't'.
     symQuote := self makeSym: 'quote'.
+    gEnv := Cons new: kNil with: kNil.
+    self addToEnv: symT val: symT to: gEnv
   ]
 
   symTable := Dictionary new.
@@ -88,15 +105,19 @@ Object subclass: Util [
   ]
 
   Util class >> safeCar: obj [
-    self match: obj class with: {
-      Cons -> [^obj car]
-    } default: [^kNil]
+    (obj class) = Cons ifTrue: [
+      ^obj car
+    ] ifFalse: [
+      ^kNil
+    ]
   ]
 
   Util class >> safeCdr: obj [
-    self match: obj class with: {
-      Cons -> [^obj cdr]
-    } default: [^kNil]
+    (obj class) = Cons ifTrue: [
+      ^obj cdr
+    ] ifFalse: [
+      ^kNil
+    ]
   ]
 
   Util class >> nreverse: lst [
@@ -203,6 +224,29 @@ Object subclass: Util [
       ]
     ] repeat
   ]
+
+  Util class >> findVar: sym from: e [
+    | env alist |
+    env := e.
+    [(env class) = Cons] whileTrue: [
+      alist := env car.
+      [(alist class) = Cons] whileTrue: [
+        (alist car) car == sym ifTrue: [
+          ^alist car
+        ] ifFalse: [
+          alist := alist cdr
+        ]
+      ].
+      env := env cdr
+    ].
+    ^kNil
+  ]
+
+  Util class >> addToEnv: sym val: val to: env [
+    env setCar: (Cons new: (Cons new: sym with: val) with: (env car))
+  ]
+
+  Util class >> eval: obj [^obj eval: gEnv]
 ]
 
 Object subclass: Lisp [
@@ -211,7 +255,7 @@ Object subclass: Lisp [
     '> ' display.
     line := stdin nextLine.
     [line ~= nil] whileTrue: [
-      ((Util read: line) at: 1) print displayNl.
+      (Util eval: ((Util read: line) at: 1)) print displayNl.
       '> ' display.
       line := stdin nextLine.
     ]
