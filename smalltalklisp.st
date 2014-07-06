@@ -125,6 +125,7 @@ Object subclass: Util [
   symIf := nil.
   symLambda := nil.
   symDefun := nil.
+  symSetq := nil.
   gEnv := nil.
 
   Util class >> init [
@@ -133,6 +134,7 @@ Object subclass: Util [
     symIf := self makeSym: 'if'.
     symLambda := self makeSym: 'lambda'.
     symDefun := self makeSym: 'defun'.
+    symSetq := self makeSym: 'setq'.
     gEnv := Cons new: kNil with: kNil.
     self addToEnv: symT val: symT to: gEnv.
 
@@ -315,7 +317,7 @@ Object subclass: Util [
   Util class >> eval: obj [^obj eval: gEnv]
 
   Util class >> evalCompound: obj env: env [
-    | op args c expr sym |
+    | op args c expr sym val bind |
     op := self safeCar: obj.
     args := self safeCdr: obj.
     op == symQuote ifTrue: [
@@ -341,6 +343,18 @@ Object subclass: Util [
       sym := self safeCar: args.
       self addToEnv: sym val: expr to: gEnv.
       ^sym
+    ].
+    op == symSetq ifTrue: [
+      val := (self safeCar: (self safeCdr: args)) eval: env.
+      (val class) = Error ifTrue: [^val].
+      sym := self safeCar: args.
+      bind := self findVar: sym from: env.
+      bind == kNil ifTrue: [
+        self addToEnv: sym val: val to: gEnv
+      ] ifFalse: [
+        bind setCdr: val
+      ].
+      ^val
     ].
     ^self apply: (op eval: env) args: (self evlis: args env: env)
   ]
