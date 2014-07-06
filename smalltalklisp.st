@@ -4,6 +4,7 @@ Object subclass: LObj [
 
 LObj subclass: Nil [
   Nil class >> new [^super new]
+  print [^'nil']
 ]
 
 LObj subclass: Num [
@@ -11,6 +12,7 @@ LObj subclass: Num [
   Num class >> new: n [^super new setData: n; yourself]
   setData: n [num := n]
   data [^num]
+  print [^num printString]
 ]
 
 LObj subclass: Sym [
@@ -18,6 +20,7 @@ LObj subclass: Sym [
   Sym class >> new: s [^super new setData: s; yourself]
   setData: s [name := s]
   data [^name]
+  print [^name]
 ]
 
 LObj subclass: Error [
@@ -25,6 +28,7 @@ LObj subclass: Error [
   Error class >> new: s [^super new setData: s; yourself]
   setData: s [msg := s]
   data [^msg]
+  print [^'<error: ', msg, '>']
 ]
 
 LObj subclass: Cons [
@@ -32,9 +36,29 @@ LObj subclass: Cons [
   Cons class >> new: a with: d [^super new setData: a with: d; yourself]
   setData: a with: d [ar := a. dr := d]
   setCar: a [ar := a]
-  setCdr: d [ar := d]
+  setCdr: d [dr := d]
   car [^ar]
   cdr [^dr]
+  print [
+    | obj ret first |
+    obj := self.
+    ret := ''.
+    first := true.
+    [(obj class) = Cons] whileTrue: [
+      first = true ifTrue: [
+        first := false
+      ] ifFalse: [
+        ret := ret, ' '
+      ].
+      ret := ret, ((obj car) print).
+      obj := obj cdr
+    ].
+    (obj class) = Nil ifTrue: [
+      ^'(', ret, ')'
+    ] ifFalse: [
+      ^'(', ret, ' . ', (obj print), ')'
+    ]
+  ]
 ]
 
 Object subclass: Util [
@@ -43,6 +67,11 @@ Object subclass: Util [
   kQuote :=  $'.
 
   kNil := Nil new.
+  symQuote := nil.
+
+  Util class >> init [
+    symQuote := self makeSym: 'quote'.
+  ]
 
   symTable := Dictionary new.
   Util class >> makeSym: s [
@@ -68,6 +97,19 @@ Object subclass: Util [
     self match: obj class with: {
       Cons -> [^obj cdr]
     } default: [^kNil]
+  ]
+
+  Util class >> nreverse: lst [
+    | l tmp ret |
+    l := lst.
+    ret := kNil.
+    [(l class) = Cons] whileTrue: [
+      tmp := l cdr.
+      l setCdr: ret.
+      ret := l.
+      l := tmp
+    ].
+    ^ret
   ]
 
   Util class >> isSpace: c [
@@ -121,17 +163,45 @@ Object subclass: Util [
   ]
 
   Util class >> read: str [
-    | s |
+    | s tmp |
     s := self skipSpaces: str.
     (s size) = 0 ifTrue: [
       ^{Error new: 'empty input'. ''}
     ] ifFalse: [
       self match: (s at: 1) with: {
         kRPar -> [^{Error new: 'invalid syntax: ', s. ''}].
-        kLPar -> [^{Error new: 'noimpl'. ''}].
-        kQuote -> [^{Error new: 'noimpl'. ''}]
+        kLPar -> [^self readList: (s copyFrom: 2 to: s size)].
+        kQuote -> [
+          tmp := self read: (s copyFrom: 2 to: s size).
+          ^{Cons new: symQuote with: (Cons new: (tmp at: 1) with: kNil).
+            tmp at: 2}
+        ]
       } default: [^self readAtom: s]
     ]
+  ]
+
+  Util class >> readList: str [
+    | s ret tmp |
+    s := str.
+    ret := kNil.
+    [
+      s := self skipSpaces: s.
+      (s size) = 0 ifTrue: [
+        ^{Error new: 'unfinished parenthesis'. ''}
+      ] ifFalse: [
+        (s at: 1) = kRPar ifTrue: [
+          ^{self nreverse: ret. s copyFrom: 2 to: s size}
+        ] ifFalse: [
+          tmp := self read: s.
+          ((tmp at: 1) class) = Error ifTrue: [
+            ^tmp
+          ] ifFalse: [
+            ret := Cons new: (tmp at: 1) with: ret.
+            s := tmp at: 2
+          ]
+        ]
+      ]
+    ] repeat
   ]
 ]
 
@@ -141,11 +211,12 @@ Object subclass: Lisp [
     '> ' display.
     line := stdin nextLine.
     [line ~= nil] whileTrue: [
-      (Util read: line) displayNl.
+      ((Util read: line) at: 1) print displayNl.
       '> ' display.
       line := stdin nextLine.
     ]
   ]
 ]
 
+Util init.
 Lisp repl.
