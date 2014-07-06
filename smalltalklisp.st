@@ -3,7 +3,6 @@ Object subclass: LObj [
 ]
 
 LObj subclass: Nil [
-  Nil class >> new [^super new]
   print [^'nil']
   eval: env [^self]
 ]
@@ -71,6 +70,26 @@ LObj subclass: Cons [
       ^'(', ret, ' . ', (obj print), ')'
     ]
   ]
+  eval: env [^Util evalCompound: self env: env]
+]
+
+LObj subclass: Subr [
+  print [^'<subr>']
+  call: args [^Error new: 'no subr implementation']
+]
+
+Subr subclass: SubrCar [
+  call: args [^Util safeCar: (Util safeCar: args)]
+]
+
+Subr subclass: SubrCdr [
+  call: args [^Util safeCdr: (Util safeCar: args)]
+]
+
+Subr subclass: SubrCons [
+  call: args [
+    ^Cons new: (Util safeCar: args) with: (Util safeCar: (Util safeCdr: args))
+  ]
 ]
 
 Object subclass: Util [
@@ -81,13 +100,19 @@ Object subclass: Util [
   kNil := Nil new.
   symT := nil.
   symQuote := nil.
+  symIf := nil.
   gEnv := nil.
 
   Util class >> init [
     symT := self makeSym: 't'.
     symQuote := self makeSym: 'quote'.
+    symIf := self makeSym: 'if'.
     gEnv := Cons new: kNil with: kNil.
-    self addToEnv: symT val: symT to: gEnv
+    self addToEnv: symT val: symT to: gEnv.
+
+    self addToEnv: (self makeSym: 'car') val: (SubrCar new) to: gEnv.
+    self addToEnv: (self makeSym: 'cdr') val: (SubrCdr new) to: gEnv.
+    self addToEnv: (self makeSym: 'cons') val: (SubrCons new) to: gEnv.
   ]
 
   symTable := Dictionary new.
@@ -247,6 +272,51 @@ Object subclass: Util [
   ]
 
   Util class >> eval: obj [^obj eval: gEnv]
+
+  Util class >> evalCompound: obj env: env [
+    | op args c |
+    op := self safeCar: obj.
+    args := self safeCdr: obj.
+    op == symQuote ifTrue: [
+      ^self safeCar: args
+    ].
+    op == symIf ifTrue: [
+      c := (self safeCar: args) eval: env.
+      (c class) = Error ifTrue: [
+        ^c
+      ] ifFalse: [
+        c == kNil ifTrue: [
+          ^(self safeCar: (self safeCdr: (self safeCdr: args))) eval: env
+        ] ifFalse: [
+          ^(self safeCar: (self safeCdr: args)) eval: env
+        ]
+      ]
+    ].
+    ^self apply: (op eval: env) args: (self evlis: args env: env)
+  ]
+
+  Util class >> evlis: lst env: env [
+    | l ret elm |
+    l := lst.
+    ret := kNil.
+    [(l class) = Cons] whileTrue: [
+      elm := (l car) eval: env.
+      (elm class) = Error ifTrue: [
+        ^elm
+      ] ifFalse: [
+        ret := Cons new: elm with: ret.
+        l := l cdr
+      ]
+    ].
+    ^self nreverse: ret
+  ]
+
+  Util class >> apply: fn args: args [
+    (fn class) = Error ifTrue: [^fn].
+    (args class) = Error ifTrue: [^args].
+    (fn class superclass) = Subr ifTrue: [^fn call: args].
+    ^Error new: (fn print), ' is not function'
+  ]
 ]
 
 Object subclass: Lisp [
