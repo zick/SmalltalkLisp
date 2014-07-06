@@ -124,6 +124,7 @@ Object subclass: Util [
   symQuote := nil.
   symIf := nil.
   symLambda := nil.
+  symDefun := nil.
   gEnv := nil.
 
   Util class >> init [
@@ -131,6 +132,7 @@ Object subclass: Util [
     symQuote := self makeSym: 'quote'.
     symIf := self makeSym: 'if'.
     symLambda := self makeSym: 'lambda'.
+    symDefun := self makeSym: 'defun'.
     gEnv := Cons new: kNil with: kNil.
     self addToEnv: symT val: symT to: gEnv.
 
@@ -313,7 +315,7 @@ Object subclass: Util [
   Util class >> eval: obj [^obj eval: gEnv]
 
   Util class >> evalCompound: obj env: env [
-    | op args c |
+    | op args c expr sym |
     op := self safeCar: obj.
     args := self safeCdr: obj.
     op == symQuote ifTrue: [
@@ -333,6 +335,12 @@ Object subclass: Util [
     ].
     op == symLambda ifTrue: [
       ^Expr new: args env: env
+    ].
+    op == symDefun ifTrue: [
+      expr := Expr new: (self safeCdr: args) env: env.
+      sym := self safeCar: args.
+      self addToEnv: sym val: expr to: gEnv.
+      ^sym
     ].
     ^self apply: (op eval: env) args: (self evlis: args env: env)
   ]
