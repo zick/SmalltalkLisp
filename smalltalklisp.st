@@ -92,6 +92,28 @@ Subr subclass: SubrCons [
   ]
 ]
 
+LObj subclass: Expr [
+  | args body env |
+  Expr class >> new: a env: e [^super new setData: a env: e; yourself]
+  setData: a env: e [
+    args := Util safeCar: a.
+    body := Util safeCdr: a.
+    env := e
+  ]
+  print [^'<expr>']
+  call: a [
+    | b e ret |
+    ret := Util getNil.
+    b := body.
+    e := Cons new: (Util pairlis: args with: a) with: env.
+    [(b class) = Cons] whileTrue: [
+      ret := (b car) eval: e.
+      b := b cdr.
+    ].
+    ^ret
+  ]
+]
+
 Object subclass: Util [
   kLPar :=  $(.
   kRPar :=  $).
@@ -101,12 +123,14 @@ Object subclass: Util [
   symT := nil.
   symQuote := nil.
   symIf := nil.
+  symLambda := nil.
   gEnv := nil.
 
   Util class >> init [
     symT := self makeSym: 't'.
     symQuote := self makeSym: 'quote'.
     symIf := self makeSym: 'if'.
+    symLambda := self makeSym: 'lambda'.
     gEnv := Cons new: kNil with: kNil.
     self addToEnv: symT val: symT to: gEnv.
 
@@ -114,6 +138,8 @@ Object subclass: Util [
     self addToEnv: (self makeSym: 'cdr') val: (SubrCdr new) to: gEnv.
     self addToEnv: (self makeSym: 'cons') val: (SubrCons new) to: gEnv.
   ]
+
+  Util class >> getNil [^kNil]
 
   symTable := Dictionary new.
   Util class >> makeSym: s [
@@ -156,6 +182,19 @@ Object subclass: Util [
       l := tmp
     ].
     ^ret
+  ]
+
+  Util class >> pairlis: lst1 with: lst2 [
+    | l1 l2 ret |
+    l1 := lst1.
+    l2 := lst2.
+    ret := kNil.
+    [((l1 class) = Cons) & ((l2 class) = Cons)] whileTrue: [
+      ret := Cons new: (Cons new: (l1 car) with: (l2 car)) with: ret.
+      l1 := l1 cdr.
+      l2 := l2 cdr
+    ].
+    ^self nreverse: ret
   ]
 
   Util class >> isSpace: c [
@@ -292,6 +331,9 @@ Object subclass: Util [
         ]
       ]
     ].
+    op == symLambda ifTrue: [
+      ^Expr new: args env: env
+    ].
     ^self apply: (op eval: env) args: (self evlis: args env: env)
   ]
 
@@ -315,6 +357,7 @@ Object subclass: Util [
     (fn class) = Error ifTrue: [^fn].
     (args class) = Error ifTrue: [^args].
     (fn class superclass) = Subr ifTrue: [^fn call: args].
+    (fn class) = Expr ifTrue: [^fn call: args].
     ^Error new: (fn print), ' is not function'
   ]
 ]
